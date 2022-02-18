@@ -35,6 +35,12 @@ py_binary(
     ],
 )
 
+ufunc_headers = glob(["aten/src/ATen/native/ufunc/*.h"])
+ufunc_names = [paths.split_extension(paths.basename(ufunc_header))[0] for ufunc_header in ufunc_headers]
+ufunc_cpu_outputs = ["aten/src/ATen/UfuncCPU_{}.cpp".format(n) for n in ufunc_names]
+ufunc_cpu_kernel_outputs = ["aten/src/ATen/UfuncCPUKernel_{}.cpp".format(n) for n in ufunc_names]
+ufunc_cuda_outputs = ["aten/src/ATen/UfuncCUDA_{}.cu".format(n) for n in ufunc_names]
+
 aten_generation_srcs = ["aten/src/ATen/native/native_functions.yaml"] + glob(["aten/src/ATen/templates/**"])
 
 generated_cpu_cpp = [
@@ -94,7 +100,7 @@ generated_cuda_cpp = [
 generate_aten(
     name = "generated_aten_cpp",
     srcs = aten_generation_srcs,
-    outs = generated_cpu_cpp + generated_cuda_cpp + [
+    outs = generated_cpu_cpp + generated_cuda_cpp + ufunc_cpu_outputs + ufunc_cpu_kernel_outputs + ufunc_cuda_outputs + [
          "aten/src/ATen/Declarations.yaml",
     ],
     generator=":gen",
@@ -289,7 +295,7 @@ filegroup(
             "aten/src/ATen/native/miopen/*.cpp",
             "aten/src/ATen/native/sparse/cuda/*.cpp",
             "aten/src/THC/*.cpp",
-        ],
+        ] + [":{}".format(f) for f in ufunc_cuda_outputs],
     ),
 )
 
@@ -383,6 +389,7 @@ intern_build_aten_ops(
         "@fbgemm",
         "@mkl",
     ],
+    extra_impls = ufunc_cpu_kernel_outputs,
 )
 
 cc_library(
@@ -400,7 +407,7 @@ cc_library(
         ":aten_native_sparse_cpp",
         ":aten_native_xnnpack",
         ":aten_src_ATen_config",
-    ] + generated_cpu_cpp,
+    ] + generated_cpu_cpp + ufunc_cpu_outputs,
     copts = ATEN_COPTS,
     data = if_cuda(
         [":libcaffe2_nvrtc.so"],
